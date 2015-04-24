@@ -168,7 +168,7 @@ bool bs_good(bs_device_t* device) {
         assert(false);
         return false;
     }
-    // TODO: Make a more effective version?
+    /* TODO: Make a more effective version? */
     return bs_get(device, &clr);
 }
 
@@ -216,7 +216,7 @@ bool bs_set_pro(bs_device_t* device, uint8_t index, bs_color_t color) {
         return bs_ctrl_transfer(device, 0x20, 0x9, 1, 0, data, 4) == 4;
     } else {
         data[0] = 5;
-        data[1] = 0;  // Channel
+        data[1] = 0;  /* Channel */
         data[2] = index;
         data[3] = color.red;
         data[4] = color.green;
