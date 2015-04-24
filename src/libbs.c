@@ -225,6 +225,30 @@ bool bs_set_pro(bs_device_t* device, uint8_t index, bs_color_t color) {
     }
 }
 
+static uint8_t report_id(uint8_t count) {
+    if (count <= 8) {
+        return 6;
+    } else if (count <= 16) {
+        return 7;
+    } else if (count <= 32) {
+        return 8;
+    }
+    return 9;
+}
+
+static size_t min_size(uint8_t count) {
+    if (count <= 8) {
+        count = 8;
+    } else if (count <= 16) {
+        count = 16;
+    } else if (count <= 32) {
+        count = 32;
+    } else {
+        count = 64;
+    }
+    return 2 + count * 3;
+}
+
 bool bs_get_pro(bs_device_t* device, uint8_t index, bs_color_t* color) {
     if (device == NULL || color == NULL) {
         assert(false);
@@ -241,19 +265,10 @@ bool bs_get_pro(bs_device_t* device, uint8_t index, bs_color_t* color) {
         color->blue = data[3];
         return true;
     } else {
-        uint8_t id;
         uint8_t data[2 + 64 * 3];
-        if (index < 8) {
-            id = 6;
-        } else if (index < 16) {
-            id = 7;
-        } else if (index < 32) {
-            id = 8;
-        } else {
-            id = 9;
-        }
-        if (bs_ctrl_transfer(device, 0x80 | 0x20, 0x1, id, 0, data,
-                             sizeof(data)) < (5 + index * 3)) {
+        size_t size = min_size(index + 1);
+        if (bs_ctrl_transfer(device, 0x80 | 0x20, 0x1, report_id(index + 1), 0,
+                             data, size) < size) {
             return false;
         }
         color->red = data[2 + index * 3 + 1];
@@ -263,4 +278,57 @@ bool bs_get_pro(bs_device_t* device, uint8_t index, bs_color_t* color) {
     }
 }
 
+bool bs_set_many(bs_device_t* device, uint8_t count, const bs_color_t* color) {
+    size_t len;
+    uint8_t data[2 + 64 * 3];
+    uint8_t i;
+    size_t o, size;
+    if (count == 0) return true;
+    if (count > 64) count = 64;
+    if (device == NULL || color == NULL) {
+        assert(false);
+        return false;
+    }
+    data[0] = 0;
+    data[1] = 0;  /* Channel */
+    o = 2;
+    for (i = 0; i < count; i++) {
+        data[o++] = color[i].green;
+        data[o++] = color[i].red;
+        data[o++] = color[i].blue;
+    }
+    size = min_size(count);
+    memset(data + o, 0, size - o);
+    return bs_ctrl_transfer(device, 0x20, 0x9, report_id(count), 0, data, size)
+        == size;
+}
 
+bool bs_get_many(bs_device_t* device, uint8_t count, bs_color_t* color) {
+    size_t len;
+    uint8_t data[2 + 64 * 3];
+    uint8_t i;
+    size_t o;
+    if (count == 0) return true;
+    if (device == NULL || color == NULL) {
+        assert(false);
+        return false;
+    }
+    if (count > 64) {
+        memset(color + 64, 0, sizeof(bs_color_t) * (count - 64));
+        count = 64;
+    }
+    o = min_size(count);
+    if (bs_ctrl_transfer(device, 0x20, 0x9, report_id(count), 0, data, o) < o) {
+        return false;
+    }
+    i = count;
+    o = 2 + count * 3;
+    while (i > 0) {
+        i--;
+        color[i].blue = data[--o];
+        color[i].red = data[--o];
+        color[i].green = data[--o];
+    }
+    assert(o == 2);
+    return true;
+}

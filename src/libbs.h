@@ -113,6 +113,29 @@ BS_API bool bs_set_pro(bs_device_t* device, uint8_t index,
 BS_API bool bs_get_pro(bs_device_t* device, uint8_t index,
                        bs_color_t* color) NONULL;
 
+/**
+ * Set color of many indexed led at the same time
+ * @param device device to change colors on, may not be NULL
+ * @param count number of leds to change, always 0-count
+ *        please note that at this time blinksticks are limited to either
+ *        setting 8, 16, 32 or 64 leds at the same time, a count of five
+ *        will still set eight leds, just use black for the last three
+ * @param color color of each led, may not be NULL
+ * @return false if there was an error
+ */
+BS_API bool bs_set_many(bs_device_t* device, uint8_t count,
+                        const bs_color_t* color) NONULL;
+
+/**
+ * Get color of many indexed led at the same time
+ * @param device device to change colors on, may not be NULL
+ * @param count number of leds to query, always 0-count
+ * @param color receive color of each led, may not be NULL
+ * @return false if there was an error
+ */
+BS_API bool bs_get_many(bs_device_t* device, uint8_t count,
+                        bs_color_t* color) NONULL;
+
 #undef BS_API
 
 #endif /* LIBBS_H */
