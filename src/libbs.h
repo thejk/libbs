@@ -94,18 +94,17 @@ BS_API bool bs_set(bs_device_t* device, bs_color_t color) NONULL;
 BS_API bool bs_get(bs_device_t* device, bs_color_t* color) NONULL;
 
 /**
- * Set channel color
+ * Set color of indexed led on a pro stick
  * @param device device to change color on, may not be NULL
- * @param channel channel to set
  * @param index index to set
  * @param color color to set
  * @return false if there was an error
  */
-BS_API bool bs_set_pro(bs_device_t* device, uint8_t channel, uint8_t index,
+BS_API bool bs_set_pro(bs_device_t* device, uint8_t index,
                        bs_color_t color) NONULL;
 
 /**
- * Get current channel color
+ * Get color of indexed led on a pro stick
  * @param device device to read color from, may not be NULL
  * @param index index to get
  * @param color pointer to receive current color, may not be NULL

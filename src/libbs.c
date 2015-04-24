@@ -146,7 +146,6 @@ bs_device_t** bs_open_all(size_t max) {
 
 void bs_close(bs_device_t* device) {
     if (device == NULL) return;
-    /* libusb_release_interface(device->handle, 0); */
     libusb_close(device->handle);
     free(device->serial);
     free(device);
@@ -174,7 +173,7 @@ bool bs_good(bs_device_t* device) {
 }
 
 bool bs_set(bs_device_t* device, bs_color_t color) {
-    return bs_set_pro(device, 0, 0, color);
+    return bs_set_pro(device, 0, color);
 }
 
 bool bs_get(bs_device_t* device, bs_color_t* color) {
@@ -203,14 +202,13 @@ static ssize_t bs_ctrl_transfer(bs_device_t* device, uint8_t request_type,
     return ret;
 }
 
-bool bs_set_pro(bs_device_t* device, uint8_t channel, uint8_t index,
-                bs_color_t color) {
+bool bs_set_pro(bs_device_t* device, uint8_t index, bs_color_t color) {
     uint8_t data[6];
     if (device == NULL) {
         assert(false);
         return false;
     }
-    if (channel == 0 && index == 0) {
+    if (index == 0) {
         data[0] = 0;
         data[1] = color.red;
         data[2] = color.green;
@@ -218,7 +216,7 @@ bool bs_set_pro(bs_device_t* device, uint8_t channel, uint8_t index,
         return bs_ctrl_transfer(device, 0x20, 0x9, 1, 0, data, 4) == 4;
     } else {
         data[0] = 5;
-        data[1] = channel;
+        data[1] = 0;  // Channel
         data[2] = index;
         data[3] = color.red;
         data[4] = color.green;
