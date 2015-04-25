@@ -16,7 +16,10 @@
 static struct {
     const char* serial;
     bool verbose;
-    bool get;
+    bool get_color;
+    bool get_mode;
+    bool set_mode;
+    uint8_t mode;
     uint8_t index, count;
     bs_color_t color[64];
 } glob;
@@ -48,8 +51,35 @@ int main(int argc, char** argv) {
     if (glob.verbose && !glob.serial) {
         fprintf(stdout, "Found BlinkStick with serial: %s\n", bs_serial(dev));
     }
-    if (!glob.get) {
-        if (glob.count == 1) {
+    if (glob.get_mode) {
+        int mode = bs_get_mode(dev);
+        if (mode >= 0) {
+            fprintf(stdout, "Mode: %d ", mode);
+            switch (mode) {
+            case 0:
+                fputs("Normal\n", stdout);
+                break;
+            case 1:
+                fputs("Inverse\n", stdout);
+                break;
+            case 2:
+                fputs("WS2812\n", stdout);
+                break;
+            }
+        } else {
+            fprintf(stderr, "Error getting mode: %s\n",
+                    bs_error_str(bs_error(dev)));
+        }
+    } else if (glob.set_mode) {
+        if (!bs_set_mode(dev, glob.mode)) {
+            fprintf(stderr, "Error setting mode: %s\n",
+                    bs_error_str(bs_error(dev)));
+        }
+    }
+    if (!glob.get_color) {
+        if (glob.count == 0) {
+            ret = true;
+        } else if (glob.count == 1) {
             ret = bs_set_pro(dev, glob.index, glob.color[glob.index]);
         } else {
             memset(glob.color, 0, glob.index * sizeof(bs_color_t));
@@ -96,6 +126,14 @@ static void print_usage() {
 #endif
     fputs("get color(s) instead of default set color(s)\n", stdout);
 #if HAVE_GETOPT_LONG
+    fputs("  -m, --mode[=MODE]      ", stdout);
+#else
+    fputs("  -m [MODE]              ", stdout);
+#endif
+    fputs("set or get BlinkStick Pro mode\n", stdout);
+    fputs("                         ", stdout);
+    fputs("MODE can be 0 (Normal), 1 (Inverse) or 2 (WS2812).\n", stdout);
+#if HAVE_GETOPT_LONG
     fputs("  -s, --serial=SERIAL    ", stdout);
 #else
     fputs("  -s SERIAL              ", stdout);
@@ -129,7 +167,7 @@ static void print_usage() {
 }
 
 bool handle_args(int argc, char** argv, int* exitcode) {
-    const char* shortopts = "Vhvs:gi:";
+    const char* shortopts = "Vhvs:gi:m::";
     bool error = false, usage = false, version = false;
 #if HAVE_GETOPT_LONG
     static const struct option longopts[] = {
@@ -139,6 +177,7 @@ bool handle_args(int argc, char** argv, int* exitcode) {
         { "serial",  required_argument, NULL, 's' },
         { "get",     no_argument,       NULL, 'g' },
         { "index",   required_argument, NULL, 'i' },
+        { "mode",    optional_argument, NULL, 'm' },
         { NULL,      0,                 NULL,  0  }
     };
 #endif
@@ -165,7 +204,23 @@ bool handle_args(int argc, char** argv, int* exitcode) {
             glob.serial = optarg;
             break;
         case 'g':
-            glob.get = true;
+            glob.get_color = true;
+            break;
+        case 'm':
+            if (optarg) {
+                char* end = NULL;
+                long tmp;
+                glob.set_mode = true;
+                errno = 0;
+                tmp = strtol(optarg, &end, 10);
+                if (errno || !end || *end || tmp < 0 || tmp > 2) {
+                    fprintf(stderr, "Invalid mode value: %s\n", optarg);
+                    error = true;
+                }
+                glob.mode = tmp & 0xff;
+            } else {
+                glob.get_mode = true;
+            }
             break;
         case 'i': {
             char* end = NULL;
@@ -184,7 +239,7 @@ bool handle_args(int argc, char** argv, int* exitcode) {
             break;
         }
     }
-    if (glob.get) {
+    if (glob.get_color) {
         if (optind >= argc) {
             glob.count = 1;
         } else if (optind + 1 == argc) {
@@ -198,11 +253,11 @@ bool handle_args(int argc, char** argv, int* exitcode) {
             }
             glob.count = tmp & 0xff;
         } else {
-            fputs("Only expects one argument in get mode\n", stderr);
+            fputs("Only expects one argument when getting color\n", stderr);
             error = true;
         }
     } else {
-        if (optind == argc) {
+        if (!glob.get_mode && !glob.set_mode && optind == argc) {
             fputs("Expected one color after options\n", stderr);
             error = true;
         } else {

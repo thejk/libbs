@@ -407,6 +407,34 @@ bool bs_get_many(bs_device_t* device, uint8_t count, bs_color_t* color) {
     return true;
 }
 
+bool bs_set_mode(bs_device_t* device, uint8_t mode) {
+    uint8_t data[2];
+    if (device == NULL) {
+        assert(false);
+        return false;
+    }
+    if (mode > 2) {
+        assert(false);
+        device->last_error = BS_ERROR_INVALID_PARAM;
+        return false;
+    }
+    data[0] = 4;
+    data[1] = mode;
+    return bs_ctrl_transfer(device, 0x20, 0x9, 4, 0, data, 2);
+}
+
+int bs_get_mode(bs_device_t* device) {
+    uint8_t data[2];
+    if (device == NULL) {
+        assert(false);
+        return -1;
+    }
+    if (!bs_ctrl_transfer(device, 0x80 | 0x20, 0x1, 4, 0, data, 2)) {
+        return -1;
+    }
+    return data[1];
+}
+
 bs_error_t error_from_libusb(ssize_t err) {
     if (err >= 0) return BS_NO_ERROR;
     switch (err) {

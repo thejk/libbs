@@ -174,6 +174,23 @@ BS_API bool bs_set_many(bs_device_t* device, uint8_t count,
 BS_API bool bs_get_many(bs_device_t* device, uint8_t count,
                         bs_color_t* color) NONULL;
 
+/**
+ * Set device mode on BlinkStick Pro.
+ * 0 = Normal,
+ * 1 = Inverse,
+ * 2 = WS2812
+ * @param device device to change mode on, may not be NULL
+ * @return false if there was an error
+ */
+BS_API bool bs_set_mode(bs_device_t* device, uint8_t mode) NONULL;
+
+/**
+ * Get current device mode from BlinkStick Pro.
+ * @param device device to get mode from, may not be NULL
+ * @return device mode or -1 in case of error
+ */
+BS_API int bs_get_mode(bs_device_t* device) NONULL;
+
 #undef BS_API
 
 #endif /* LIBBS_H */
