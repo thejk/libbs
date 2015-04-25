@@ -2,24 +2,251 @@
 # include "config.h"
 #endif
 
+#include <errno.h>
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "libbs.h"
 
+#if HAVE_GETOPT_LONG
+# include <getopt.h>
+#endif
+
+static struct {
+    const char* serial;
+    bool verbose;
+    bool get;
+    uint8_t index, count;
+    bs_color_t color[64];
+} glob;
+
+static bool handle_args(int argc, char** argv, int* exitcode);
+
 int main(int argc, char** argv) {
-    bs_device_t* dev = bs_open_first();
-    bs_color_t clr;
-    int i;
+    int exitcode;
+    bs_device_t* dev;
+    bool ret;
+    if (!handle_args(argc, argv, &exitcode)) {
+        return exitcode;
+    }
+    if (glob.serial) {
+        dev = bs_open_matching_serial(glob.serial);
+    } else {
+        dev = bs_open_first();
+    }
     if (!dev) {
         fputs("Unable to find a BlinkStick\n", stderr);
         return EXIT_FAILURE;
     }
-    clr.red = 0;
-    clr.green = 0;
-    clr.blue = 0;
-    bs_set_pro(dev, 0, 0, clr);
-    bs_set_pro(dev, 0, 1, clr);
-    bs_set_pro(dev, 0, 2, clr);
+    if (glob.verbose && !glob.serial) {
+        fprintf(stdout, "Found BlinkStick with serial: %s\n", bs_serial(dev));
+    }
+    if (!glob.get) {
+        if (glob.count == 1) {
+            ret = bs_set_pro(dev, glob.index, glob.color[glob.index]);
+        } else {
+            memset(glob.color, 0, glob.index * sizeof(bs_color_t));
+            ret = bs_set_many(dev, glob.index + glob.count, glob.color);
+        }
+    } else {
+        if (glob.count == 1) {
+            ret = bs_get_pro(dev, glob.index, glob.color + glob.index);
+        } else {
+            ret = bs_get_many(dev, glob.index + glob.count, glob.color);
+        }
+        if (ret) {
+            uint8_t i;
+            for (i = 0; i < glob.count; i++) {
+                const bs_color_t* c = &glob.color[glob.index + i];
+                fprintf(stdout, "%u: #%02x%02x%02x\n",
+                        glob.index + i, c->red, c->green, c->blue);
+            }
+        }
+    }
+    if (!ret) {
+        fputs("Error communicating with BlinkStick\n", stderr);
+    }
     bs_close(dev);
-    return EXIT_SUCCESS;
+    return ret ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+static void print_usage() {
+    fputs("Usage: `bs [OPTIONS...] COLOR [COLORS...]`\n", stdout);
+#if HAVE_GETOPT_LONG
+    fputs("       `bs --get [OPTIONS...] [COUNT]`\n", stdout);
+#else
+    fputs("       `bs -g [OPTIONS...] [COUNT]`\n", stdout);
+#endif
+    fputs("Set or get one or more colors for your BlinkStick\n", stdout);
+    fputs("Color can be either #RRGGBB or 0xRRGGBB\n", stdout);
+    fputs("\n", stdout);
+    fputs("Options:\n", stdout);
+#if HAVE_GETOPT_LONG
+    fputs("  -g, --get              ", stdout);
+#else
+    fputs("  -g                     ", stdout);
+#endif
+    fputs("get color(s) instead of default set color(s)\n", stdout);
+#if HAVE_GETOPT_LONG
+    fputs("  -s, --serial=SERIAL    ", stdout);
+#else
+    fputs("  -s SERIAL              ", stdout);
+#endif
+    fputs("work on the BlinkStick with this SERIAL\n", stdout);
+#if HAVE_GETOPT_LONG
+    fputs("  -i, --index=INDEX      ", stdout);
+#else
+    fputs("  -i INDEX               ", stdout);
+#endif
+    fputs("modify led at INDEX instead of the first one\n", stdout);
+#if HAVE_GETOPT_LONG
+    fputs("  -v, --verbose          ", stdout);
+#else
+    fputs("  -v                     ", stdout);
+#endif
+    fputs("be more verbose\n", stdout);
+#if HAVE_GETOPT_LONG
+    fputs("  -V, --version          ", stdout);
+#else
+    fputs("  -V                     ", stdout);
+#endif
+    fputs("display version and exit\n", stdout);
+#if HAVE_GETOPT_LONG
+    fputs("  -h, --help             ", stdout);
+#else
+    fputs("  -h                     ", stdout);
+#endif
+    fputs("display this text and exit\n", stdout);
+    fputs("\n", stdout);
+}
+
+bool handle_args(int argc, char** argv, int* exitcode) {
+    const char* shortopts = "Vhvs:gi:";
+    bool error = false, usage = false, version = false;
+#if HAVE_GETOPT_LONG
+    static const struct option longopts[] = {
+        { "version", no_argument,       NULL, 'V' },
+        { "help",    no_argument,       NULL, 'h' },
+        { "verbose", no_argument,       NULL, 'v' },
+        { "serial",  required_argument, NULL, 's' },
+        { "get",     no_argument,       NULL, 'g' },
+        { "index",   required_argument, NULL, 'i' },
+        { NULL,      0,                 NULL,  0  }
+    };
+#endif
+    while (true) {
+        int c;
+#if HAVE_GETOPT_LONG
+        int index;
+        c = getopt_long(argc, argv, shortopts, longopts, &index);
+#else
+        c = getopt(argc, argv, shortopts);
+#endif
+        if (c == -1) break;
+        switch (c) {
+        case 'V':
+            version = true;
+            break;
+        case 'h':
+            usage = true;
+            break;
+        case 'v':
+            glob.verbose = true;
+            break;
+        case 's':
+            glob.serial = optarg;
+            break;
+        case 'g':
+            glob.get = true;
+            break;
+        case 'i': {
+            char* end = NULL;
+            long tmp;
+            errno = 0;
+            tmp = strtol(optarg, &end, 10);
+            if (errno || !end || *end || tmp < 0 || tmp > 255) {
+                fprintf(stderr, "Invalid index value: %s\n", optarg);
+                error = true;
+            }
+            glob.index = tmp & 0xff;
+            break;
+        }
+        case '?':
+            error = true;
+            break;
+        }
+    }
+    if (glob.get) {
+        if (optind >= argc) {
+            glob.count = 1;
+        } else if (optind + 1 == argc) {
+            char* end = NULL;
+            long tmp;
+            errno = 0;
+            tmp = strtol(argv[optind], &end, 10);
+            if (errno || !end || *end || tmp <= 0 || tmp > 255) {
+                fprintf(stderr, "Invalid count value: %s\n", argv[optind]);
+                error = true;
+            }
+            glob.count = tmp & 0xff;
+        } else {
+            fputs("Only expects one argument in get mode\n", stderr);
+            error = true;
+        }
+    } else {
+        if (optind == argc) {
+            fputs("Expected one color after options\n", stderr);
+            error = true;
+        } else {
+            while (optind < argc) {
+                char* end = NULL;
+                unsigned long tmp;
+                bs_color_t* c;
+                size_t offset;
+                if (strlen(argv[optind]) == 7 && argv[optind][0] == '#') {
+                    offset = 1;
+                } else if (strlen(argv[optind]) == 8 &&
+                           memcmp(argv[optind], "0x", 2) == 0) {
+                    offset = 2;
+                } else {
+                    fprintf(stderr, "Invalid color value: %s\n", argv[optind]);
+                    error = true;
+                    break;
+                }
+                errno = 0;
+                tmp = strtoul(argv[optind] + offset, &end, 16);
+                if (errno || !end || *end) {
+                    fprintf(stderr, "Invalid color value: %s\n", argv[optind]);
+                    error = true;
+                    break;
+                }
+                c = &glob.color[glob.index + glob.count++];
+                c->red = (tmp & 0xff0000) >> 16;
+                c->green = (tmp & 0xff00) >> 8;
+                c->blue = (tmp & 0xff);
+                optind++;
+            }
+        }
+    }
+    if (usage) {
+        print_usage();
+        *exitcode = error ? EXIT_FAILURE : EXIT_SUCCESS;
+        return false;
+    }
+    if (error) {
+#if HAVE_GETOPT_LONG
+        fputs("Try `bs --help` for usage\n", stderr);
+#else
+        fputs("Try `bs -h` for usage\n", stderr);
+#endif
+        *exitcode = EXIT_FAILURE;
+        return false;
+    }
+    if (version) {
+        fputs("bs " VERSION " written by Joel Klinghed\n", stdout);
+        *exitcode = EXIT_SUCCESS;
+        return false;
+    }
+    return true;
 }

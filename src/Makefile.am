@@ -4,6 +4,7 @@ bin_PROGRAMS = bs lsbs
 lib_LTLIBRARIES = libbs.la
 
 bs_SOURCES = bs.c libbs.h compiler_stuff.h
+bs_CFLAGS = -DVERSION="\"@VERSION@\""
 bs_LDADD = libbs.la
 
 lsbs_SOURCES = lsbs.c libbs.h compiler_stuff.h
