@@ -32,6 +32,15 @@ typedef enum bs_error_t {
     BS_ERROR_UNKNOWN, /* Unknown error */
 } bs_error_t;
 
+/** Normal one led, (Pro and basic BlinkStick) */
+#define BS_MODE_NORMAL (0)
+/** Inverse one led (Pro) */
+#define BS_MODE_INVERSE (1)
+/** Multi-led (WS2812) (Pro and BlinkStick Strip/Square) */
+#define BS_MODE_MULTI (2)
+/** Multi-led repeat (color #0 is used for all) (BlinkStick Strip/Square) */
+#define BS_MODE_REPEAT (3)
+
 /**
  * Init libbs.
  * You don't have to call this method, but if you do you must call bs_shutdown()
@@ -176,9 +185,7 @@ BS_API bool bs_get_many(bs_device_t* device, uint8_t count,
 
 /**
  * Set device mode on BlinkStick Pro.
- * 0 = Normal,
- * 1 = Inverse,
- * 2 = WS2812
+ * See BS_MODE_* for known modes.
  * @param device device to change mode on, may not be NULL
  * @return false if there was an error
  */
@@ -190,6 +197,14 @@ BS_API bool bs_set_mode(bs_device_t* device, uint8_t mode) NONULL;
  * @return device mode or -1 in case of error
  */
 BS_API int bs_get_mode(bs_device_t* device) NONULL;
+
+/**
+ * Maximum number of leds on device
+ * Uses the serial software version and current mode to try and figure this out
+ * @param device device to get leds on, may not be NULL
+ * @return 0 if there was an error
+ */
+BS_API uint16_t bs_get_max_leds(bs_device_t* device) NONULL;
 
 #undef BS_API
 

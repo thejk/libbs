@@ -3,13 +3,12 @@
 #endif
 
 #include <assert.h>
+#include <errno.h>
 #include <string.h>
 
 #include "libbs.h"
 
 #include <libusb.h>
-
-#include <stdio.h>
 
 static bs_error_t error_from_libusb(ssize_t err);
 
@@ -38,10 +37,19 @@ static void deinit_glob(void) {
     }
 }
 
+typedef enum {
+    BS_VERSION_UNKOWN = 0,
+    BS_VERSION_BASIC = 1,
+    BS_VERSION_PRO = 2,
+    BS_VERSION_STRIP_SQUARE = 3,
+} bs_version_t;
+
 struct bs_device_t {
     libusb_device_handle* handle;
     char* serial;
     bs_error_t last_error;
+    int mode;  /* Cached mode, -1 if unknown */
+    bs_version_t version;
 };
 
 bool bs_init(bs_error_t* error) {
@@ -61,6 +69,26 @@ void bs_shutdown(void) {
 
 static bs_device_t* bs_open(libusb_device* device, const char* match_serial,
                             bs_error_t* error) NONULL_ARGS(1) MALLOC;
+
+static bs_version_t get_version(const char* serial) {
+    char* end;
+    unsigned long tmp;
+    const char* pos = strchr(serial, '-');
+    if (!pos) return BS_VERSION_UNKOWN;
+    pos++;
+    errno = 0;
+    tmp = strtoul(pos, &end, 10);
+    if (errno || tmp == 0 || !end || *end != '.' || tmp > 0xff) {
+        return BS_VERSION_UNKOWN;
+    }
+    switch (tmp) {
+    case 1:
+    case 2:
+    case 3:
+        return (bs_version_t)tmp;
+    }
+    return BS_VERSION_UNKOWN;
+}
 
 bs_device_t* bs_open(libusb_device* device, const char* match_serial,
                      bs_error_t* error) {
@@ -103,6 +131,8 @@ bs_device_t* bs_open(libusb_device* device, const char* match_serial,
     dev->serial = malloc(len + 1);
     memcpy(dev->serial, tmp, len + 1);
     dev->last_error = BS_NO_ERROR;
+    dev->version = get_version(dev->serial);
+    dev->mode = dev->version == BS_VERSION_BASIC ? 0 : -1;
     glob.devices++;
     return dev;
 }
@@ -263,6 +293,20 @@ bool bs_ctrl_transfer(bs_device_t* device, uint8_t request_type,
     return true;
 }
 
+static size_t max_count(bs_device_t* device) NONULL;
+size_t max_count(bs_device_t* device) {
+    switch (device->version) {
+    case BS_VERSION_BASIC:
+        return 1;
+    case BS_VERSION_PRO:
+        return bs_get_mode(device) == BS_MODE_MULTI ? 64 : 1;
+    case BS_VERSION_STRIP_SQUARE:
+        return bs_get_mode(device) != BS_MODE_REPEAT ? 8 : 1;
+    case BS_VERSION_UNKOWN:
+        return 64;
+    }
+}
+
 bool bs_set_pro(bs_device_t* device, uint8_t index, bs_color_t color) {
     uint8_t data[6];
     if (device == NULL) {
@@ -274,15 +318,29 @@ bool bs_set_pro(bs_device_t* device, uint8_t index, bs_color_t color) {
         data[1] = color.red;
         data[2] = color.green;
         data[3] = color.blue;
-        return bs_ctrl_transfer(device, 0x20, 0x9, 1, 0, data, 4);
+        return bs_ctrl_transfer(device,
+                                LIBUSB_ENDPOINT_OUT |
+                                LIBUSB_REQUEST_TYPE_CLASS |
+                                LIBUSB_RECIPIENT_DEVICE,
+                                LIBUSB_REQUEST_SET_CONFIGURATION,
+                                1, 0, data, 4);
     } else {
+        if (index >= max_count(device)) {
+            device->last_error = BS_ERROR_INVALID_PARAM;
+            return false;
+        }
         data[0] = 5;
         data[1] = 0;  /* Channel */
         data[2] = index;
         data[3] = color.red;
         data[4] = color.green;
         data[5] = color.blue;
-        return bs_ctrl_transfer(device, 0x20, 0x9, 5, 0, data, 6);
+        return bs_ctrl_transfer(device,
+                                LIBUSB_ENDPOINT_OUT |
+                                LIBUSB_REQUEST_TYPE_CLASS |
+                                LIBUSB_RECIPIENT_DEVICE,
+                                LIBUSB_REQUEST_SET_CONFIGURATION,
+                                5, 0, data, 6);
     }
 }
 
@@ -322,8 +380,12 @@ bool bs_get_pro(bs_device_t* device, uint8_t index, bs_color_t* color) {
     }
     if (index == 0) {
         uint8_t data[4];
-        if (!bs_ctrl_transfer(device, 0x80 | 0x20, 0x1, 1, 0,
-                              data, sizeof(data))) {
+        if (!bs_ctrl_transfer(device,
+                              LIBUSB_ENDPOINT_IN |
+                              LIBUSB_REQUEST_TYPE_CLASS |
+                              LIBUSB_RECIPIENT_DEVICE,
+                              LIBUSB_REQUEST_CLEAR_FEATURE,
+                              1, 0, data, sizeof(data))) {
             return false;
         }
         color->red = data[1];
@@ -332,7 +394,16 @@ bool bs_get_pro(bs_device_t* device, uint8_t index, bs_color_t* color) {
         return true;
     } else {
         uint8_t data[2 + 64 * 3];
-        if (!bs_ctrl_transfer(device, 0x80 | 0x20, 0x1, report_id(index + 1), 0,
+        if (index >= max_count(device)) {
+            device->last_error = BS_ERROR_INVALID_PARAM;
+            return false;
+        }
+        if (!bs_ctrl_transfer(device,
+                              LIBUSB_ENDPOINT_IN |
+                              LIBUSB_REQUEST_TYPE_CLASS |
+                              LIBUSB_RECIPIENT_DEVICE,
+                              LIBUSB_REQUEST_CLEAR_FEATURE,
+                              report_id(index + 1), 0,
                               data, min_size(index + 1))) {
             return false;
         }
@@ -349,13 +420,17 @@ bool bs_set_many(bs_device_t* device, uint8_t count, const bs_color_t* color) {
     uint8_t i;
     size_t o, size;
     if (count == 0) return true;
-    if (count > 64) count = 64;
+    if (count == 1) return bs_set_pro(device, 0, color[0]);
     if (device == NULL) {
         assert(false);
         return false;
     }
     if (color == NULL) {
         assert(false);
+        device->last_error = BS_ERROR_INVALID_PARAM;
+        return false;
+    }
+    if (count > max_count(device)) {
         device->last_error = BS_ERROR_INVALID_PARAM;
         return false;
     }
@@ -369,7 +444,12 @@ bool bs_set_many(bs_device_t* device, uint8_t count, const bs_color_t* color) {
     }
     size = min_size(count);
     memset(data + o, 0, size - o);
-    return bs_ctrl_transfer(device, 0x20, 0x9, report_id(count), 0, data, size);
+    return bs_ctrl_transfer(device,
+                            LIBUSB_ENDPOINT_OUT |
+                            LIBUSB_REQUEST_TYPE_CLASS |
+                            LIBUSB_RECIPIENT_DEVICE,
+                            LIBUSB_REQUEST_SET_CONFIGURATION,
+                            report_id(count), 0, data, size);
 }
 
 bool bs_get_many(bs_device_t* device, uint8_t count, bs_color_t* color) {
@@ -387,12 +467,17 @@ bool bs_get_many(bs_device_t* device, uint8_t count, bs_color_t* color) {
         device->last_error = BS_ERROR_INVALID_PARAM;
         return false;
     }
-    if (count > 64) {
-        memset(color + 64, 0, sizeof(bs_color_t) * (count - 64));
-        count = 64;
+    if (count == 1) return bs_get_pro(device, 0, color);
+    if (count > max_count(device)) {
+        device->last_error = BS_ERROR_INVALID_PARAM;
+        return false;
     }
-    if (!bs_ctrl_transfer(device, 0x20, 0x9, report_id(count), 0, data,
-                          min_size(count))) {
+    if (!bs_ctrl_transfer(device,
+                          LIBUSB_ENDPOINT_IN |
+                          LIBUSB_REQUEST_TYPE_CLASS |
+                          LIBUSB_RECIPIENT_DEVICE,
+                          LIBUSB_REQUEST_SET_CONFIGURATION,
+                          report_id(count), 0, data, min_size(count))) {
         return false;
     }
     i = count;
@@ -413,14 +498,43 @@ bool bs_set_mode(bs_device_t* device, uint8_t mode) {
         assert(false);
         return false;
     }
-    if (mode > 2) {
-        assert(false);
-        device->last_error = BS_ERROR_INVALID_PARAM;
-        return false;
+    switch (device->version) {
+    case BS_VERSION_BASIC:
+        if (mode != BS_MODE_NORMAL) {
+            device->last_error = BS_ERROR_INVALID_PARAM;
+            return false;
+        }
+        return true;
+    case BS_VERSION_PRO:
+        if (mode > BS_MODE_MULTI) {
+            device->last_error = BS_ERROR_INVALID_PARAM;
+            return false;
+        }
+        break;
+    case BS_VERSION_STRIP_SQUARE:
+        if (mode < BS_MODE_MULTI || mode > BS_MODE_REPEAT) {
+            device->last_error = BS_ERROR_INVALID_PARAM;
+            return false;
+        }
+        break;
+    case BS_VERSION_UNKOWN:
+        break;
+    }
+    if (bs_get_mode(device) == mode) {
+        /* BlinkStick does not seem to like setting the already set mode */
+        return true;
     }
     data[0] = 4;
     data[1] = mode;
-    return bs_ctrl_transfer(device, 0x20, 0x9, 4, 0, data, 2);
+    if (!bs_ctrl_transfer(device,
+                          LIBUSB_ENDPOINT_OUT |
+                          LIBUSB_REQUEST_TYPE_CLASS |
+                          LIBUSB_RECIPIENT_DEVICE,
+                          LIBUSB_REQUEST_SET_CONFIGURATION, 4, 0, data, 2)) {
+        return false;
+    }
+    device->mode = mode;
+    return true;
 }
 
 int bs_get_mode(bs_device_t* device) {
@@ -429,10 +543,46 @@ int bs_get_mode(bs_device_t* device) {
         assert(false);
         return -1;
     }
-    if (!bs_ctrl_transfer(device, 0x80 | 0x20, 0x1, 4, 0, data, 2)) {
-        return -1;
+    if (device->mode < 0) {
+        if (!bs_ctrl_transfer(device,
+                              LIBUSB_ENDPOINT_IN |
+                              LIBUSB_REQUEST_TYPE_CLASS |
+                              LIBUSB_RECIPIENT_DEVICE,
+                              LIBUSB_REQUEST_CLEAR_FEATURE, 4, 0, data, 2)) {
+            return -1;
+        }
+        device->mode = data[1];
     }
-    return data[1];
+    return device->mode;
+}
+
+uint16_t bs_get_max_leds(bs_device_t* device) {
+    if (device == NULL) {
+        assert(false);
+        return 0;
+    }
+    switch (device->version) {
+    case BS_VERSION_BASIC:
+        return 1;
+    case BS_VERSION_PRO:
+        switch (bs_get_mode(device)) {
+        case BS_MODE_NORMAL:
+        case BS_MODE_INVERSE:
+            return 1;
+        case BS_MODE_MULTI:
+            return 64;
+        case -1:
+            return 0;
+        }
+        break;
+    case BS_VERSION_STRIP_SQUARE:
+        return 8;
+    case BS_VERSION_UNKOWN:
+        break;
+    }
+
+    device->last_error = BS_ERROR_NOT_SUPPORTED;
+    return 0;
 }
 
 bs_error_t error_from_libusb(ssize_t err) {

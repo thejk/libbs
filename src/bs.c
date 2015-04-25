@@ -56,14 +56,20 @@ int main(int argc, char** argv) {
         if (mode >= 0) {
             fprintf(stdout, "Mode: %d ", mode);
             switch (mode) {
-            case 0:
-                fputs("Normal\n", stdout);
+            case BS_MODE_NORMAL:
+                fputs("Normal (single-led)\n", stdout);
                 break;
-            case 1:
-                fputs("Inverse\n", stdout);
+            case BS_MODE_INVERSE:
+                fputs("Inverse (single-led)\n", stdout);
                 break;
-            case 2:
-                fputs("WS2812\n", stdout);
+            case BS_MODE_MULTI:
+                fputs("Multi-led (WS2812)\n", stdout);
+                break;
+            case BS_MODE_REPEAT:
+                fputs("Repeated multi-led (RGB-mirror)\n", stdout);
+                break;
+            default:
+                fputs("???\n", stdout);
                 break;
             }
         } else {
@@ -132,7 +138,7 @@ static void print_usage() {
 #endif
     fputs("set or get BlinkStick Pro mode\n", stdout);
     fputs("                         ", stdout);
-    fputs("MODE can be 0 (Normal), 1 (Inverse) or 2 (WS2812).\n", stdout);
+    fputs("MODE can be 0 (Normal), 1 (Inverse), 2 (Multi) or 3 (Repeat).\n", stdout);
 #if HAVE_GETOPT_LONG
     fputs("  -s, --serial=SERIAL    ", stdout);
 #else
@@ -213,7 +219,7 @@ bool handle_args(int argc, char** argv, int* exitcode) {
                 glob.set_mode = true;
                 errno = 0;
                 tmp = strtol(optarg, &end, 10);
-                if (errno || !end || *end || tmp < 0 || tmp > 2) {
+                if (errno || !end || *end || tmp < 0 || tmp > 3) {
                     fprintf(stderr, "Invalid mode value: %s\n", optarg);
                     error = true;
                 }
