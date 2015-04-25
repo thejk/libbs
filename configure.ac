@@ -15,6 +15,7 @@ AM_PROG_CC_C_O
 
 DEFINES="" #-D_GNU_SOURCE -D_BSD_SOURCE -D_ATFILE_SOURCE"
 AX_CFLAGS_WARN_ALL([DEFINES])
+AX_APPEND_COMPILE_FLAGS([-Wextra], [DEFINES])
 AC_ARG_ENABLE([debug], AC_HELP_STRING([compile with debug options]),
               if test "x$enableval" = "xyes"; then
                 DEFINES="$DEFINES -g -DDEBUG"
