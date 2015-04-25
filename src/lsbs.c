@@ -7,9 +7,11 @@
 #include "libbs.h"
 
 int main(int argc, char** argv) {
-    bs_device_t** devs = bs_open_all(0);
+    bs_error_t error;
+    bs_device_t** devs = bs_open_all(0, &error);
     if (devs == NULL) {
-        fputs("Error listing BlinkStick devices\n", stderr);
+        fprintf(stderr, "Error listing BlinkStick devices: %s\n",
+                bs_error_str(error));
         return EXIT_FAILURE;
     }
     if (*devs) {

@@ -15,6 +15,23 @@ typedef struct bs_color_t {
     uint8_t blue;
 } bs_color_t;
 
+typedef enum bs_error_t {
+    BS_NO_ERROR = 0,
+    BS_ERROR_COMM, /* Communication error, didn't get expected number of bytes
+                    * back from a request */
+    BS_ERROR_IO, /* Input/output error */
+    BS_ERROR_INVALID_PARAM, /* Invalid parameter */
+    BS_ERROR_ACCESS, /* Access denied */
+    BS_ERROR_DISCONNECTED, /* Device disconnected */
+    BS_ERROR_BUSY, /* Resource busy */
+    BS_ERROR_TIMEOUT, /* Operation timeout */
+    BS_ERROR_OVERFLOW, /* Overflow */
+    BS_ERROR_PIPE, /* Pipe error */
+    BS_ERROR_NO_MEM, /* Insufficient memory */
+    BS_ERROR_NOT_SUPPORTED, /* Operation not supported */
+    BS_ERROR_UNKNOWN, /* Unknown error */
+} bs_error_t;
+
 /**
  * Init libbs.
  * You don't have to call this method, but if you do you must call bs_shutdown()
@@ -25,9 +42,10 @@ typedef struct bs_color_t {
  * no-op if called more than once but it's undefined to call bs_shutdown()
  * more than once. Calling bs_init(), bs_shutdown() and then bs_init() again
  * is OK tho.
+ * @param error if non-null, set to error if there was one
  * @return false if there was an error initializing the library
  */
-BS_API bool bs_init(void);
+BS_API bool bs_init(bs_error_t* error);
 
 /**
  * Shutdown libbs after a call to bs_init. Make sure all open devices are
@@ -38,25 +56,32 @@ BS_API void bs_shutdown(void);
 /**
  * Open first BlinkStick found.
  * Remember to close returned device.
+ * @param error if non-null, set to error if there was one
  * @return device or NULL in case of error
  */
-BS_API bs_device_t* bs_open_first(void) MALLOC;
+BS_API bs_device_t* bs_open_first(bs_error_t* error) MALLOC;
+
 /**
  * Open BlinkStick with matching serial if found.
  * Remember to close returned device.
  * @param serial serial to search for, may not be NULL
+ * @param error if non-null, set to error if there was one
  * @return device or NULL in case of error
  */
-BS_API bs_device_t* bs_open_matching_serial(const char* serial) NONULL MALLOC;
+BS_API bs_device_t* bs_open_matching_serial(const char* serial,
+                                            bs_error_t* error)
+    NONULL_ARGS(1) MALLOC;
+
 /**
  * Open all BlinkStick devices found.
  * Remember to close each individual device when done and then free the array
  * itself.
  * @param max maximum number of devices to return, if 0 is given a default is
  *            used (currently 12)
+ * @param error if non-null, set to error if there was one
  * @return NULL-terminated array of open devices or NULL in case of error
  */
-BS_API bs_device_t** bs_open_all(size_t max) MALLOC;
+BS_API bs_device_t** bs_open_all(size_t max, bs_error_t* error) MALLOC;
 
 /**
  * Close open device, calling twice on the same device is undefined.
@@ -76,6 +101,19 @@ BS_API char* bs_serial(bs_device_t* device) NONULL MALLOC;
  * @return true if device seems to be working
  */
 BS_API bool bs_good(bs_device_t* device) NONULL;
+
+/**
+ * Return last error, not reset to BS_NO_ERROR when a method succeeds after
+ * an earlier failure.
+ * @param device to get error from, may not be NULL
+ * @return last error if any
+ */
+BS_API bs_error_t bs_error(bs_device_t* device) NONULL;
+
+/**
+ * Return an description of the error in English
+ */
+BS_API const char* bs_error_str(bs_error_t err);
 
 /**
  * Set current color

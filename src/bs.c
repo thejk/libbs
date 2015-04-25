@@ -27,16 +27,22 @@ int main(int argc, char** argv) {
     int exitcode;
     bs_device_t* dev;
     bool ret;
+    bs_error_t error;
     if (!handle_args(argc, argv, &exitcode)) {
         return exitcode;
     }
     if (glob.serial) {
-        dev = bs_open_matching_serial(glob.serial);
+        dev = bs_open_matching_serial(glob.serial, &error);
     } else {
-        dev = bs_open_first();
+        dev = bs_open_first(&error);
     }
     if (!dev) {
-        fputs("Unable to find a BlinkStick\n", stderr);
+        if (error == BS_NO_ERROR) {
+            fputs("Unable to find a BlinkStick\n", stderr);
+        } else {
+            fprintf(stderr, "Error opening BlinkStick: %s\n",
+                    bs_error_str(error));
+        }
         return EXIT_FAILURE;
     }
     if (glob.verbose && !glob.serial) {
@@ -65,7 +71,8 @@ int main(int argc, char** argv) {
         }
     }
     if (!ret) {
-        fputs("Error communicating with BlinkStick\n", stderr);
+        fprintf(stderr, "Error communicating with BlinkStick: %s\n",
+                bs_error_str(bs_error(dev)));
     }
     bs_close(dev);
     return ret ? EXIT_SUCCESS : EXIT_FAILURE;

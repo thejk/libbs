@@ -11,15 +11,19 @@
 
 #include <stdio.h>
 
+static bs_error_t error_from_libusb(ssize_t err);
+
 static struct {
     libusb_context* ctx;
     bool forced;
     long devices;
 } glob;
 
-static bool init_glob(void) {
+static bool init_glob(bs_error_t* error) {
     if (glob.ctx == NULL) {
-        if (libusb_init(&glob.ctx) != 0) {
+        int ret = libusb_init(&glob.ctx);
+        if (ret != 0) {
+            if (error) *error = error_from_libusb(ret);
             return false;
         }
         assert(glob.ctx);
@@ -37,11 +41,13 @@ static void deinit_glob(void) {
 struct bs_device_t {
     libusb_device_handle* handle;
     char* serial;
+    bs_error_t last_error;
 };
 
-bool bs_init(void) {
+bool bs_init(bs_error_t* error) {
+    if (error) *error = BS_NO_ERROR;
     if (glob.forced) return true;
-    if (!init_glob()) return false;
+    if (!init_glob(error)) return false;
     glob.forced = true;
     return true;
 }
@@ -53,19 +59,36 @@ void bs_shutdown(void) {
     deinit_glob();
 }
 
-static bs_device_t* bs_open(libusb_device* device, const char* match_serial) {
+static bs_device_t* bs_open(libusb_device* device, const char* match_serial,
+                            bs_error_t* error) NONULL_ARGS(1) MALLOC;
+
+bs_device_t* bs_open(libusb_device* device, const char* match_serial,
+                     bs_error_t* error) {
     libusb_device_handle* handle;
     bs_device_t* dev;
     struct libusb_device_descriptor desc;
     char tmp[256];
-    int len;
+    int ret, len;
     char* end;
-    if (libusb_get_device_descriptor(device, &desc)) return NULL;
+    ret = libusb_get_device_descriptor(device, &desc);
+    if (ret) {
+        if (error) *error = error_from_libusb(ret);
+        return NULL;
+    }
     if (desc.idVendor != 0x20a0 || desc.idProduct != 0x41e5) return NULL;
-    if (libusb_open(device, &handle) != 0) return NULL;
-    len = libusb_get_string_descriptor_ascii(
-            handle, desc.iSerialNumber, (uint8_t*)tmp, sizeof(tmp) - 1);
+    do {
+        ret = libusb_open(device, &handle);
+    } while (ret == LIBUSB_ERROR_INTERRUPTED);
+    if (ret) {
+        if (error) *error = error_from_libusb(ret);
+        return NULL;
+    }
+    do {
+        len = libusb_get_string_descriptor_ascii(
+                handle, desc.iSerialNumber, (uint8_t*)tmp, sizeof(tmp) - 1);
+    } while (len == LIBUSB_ERROR_INTERRUPTED);
     if (len <= 3) {
+        if (len < 0 && error) *error = error_from_libusb(len);
         libusb_close(handle);
         return NULL;
     }
@@ -79,60 +102,74 @@ static bs_device_t* bs_open(libusb_device* device, const char* match_serial) {
     dev->handle = handle;
     dev->serial = malloc(len + 1);
     memcpy(dev->serial, tmp, len + 1);
+    dev->last_error = BS_NO_ERROR;
     glob.devices++;
     return dev;
 }
 
-bs_device_t* bs_open_first(void) {
+bs_device_t* bs_open_first(bs_error_t* error) {
     size_t i;
     ssize_t count;
     libusb_device** devices;
     bs_device_t* dev = NULL;
-    if (!init_glob()) return NULL;
+    if (!init_glob(error)) return NULL;
     count = libusb_get_device_list(glob.ctx, &devices);
-    if (count < 0) return NULL;
+    if (count < 0) {
+        if (error) *error = error_from_libusb(count);
+        return NULL;
+    }
+    if (error) *error = BS_NO_ERROR;
     for (i = 0; i < (size_t)count; i++) {
-        dev = bs_open(devices[i], NULL);
+        dev = bs_open(devices[i], NULL, error);
         if (dev) break;
     }
     libusb_free_device_list(devices, 1);
     return dev;
 }
 
-bs_device_t* bs_open_matching_serial(const char* serial) {
+bs_device_t* bs_open_matching_serial(const char* serial, bs_error_t* error) {
     size_t i;
     ssize_t count;
     libusb_device** devices;
     bs_device_t* dev = NULL;
     if (!serial) {
         assert(false);
+        if (error) *error = BS_ERROR_INVALID_PARAM;
         return NULL;
     }
-    if (!init_glob()) return NULL;
+    if (!init_glob(error)) return NULL;
     count = libusb_get_device_list(glob.ctx, &devices);
-    if (count < 0) return NULL;
+    if (count < 0) {
+        if (error) *error = error_from_libusb(count);
+        return NULL;
+    }
+    if (error) *error = BS_NO_ERROR;
     for (i = 0; i < (size_t)count; i++) {
-        dev = bs_open(devices[i], serial);
+        dev = bs_open(devices[i], serial, error);
         if (dev) break;
     }
     libusb_free_device_list(devices, 1);
     return dev;
 }
 
-bs_device_t** bs_open_all(size_t max) {
+bs_device_t** bs_open_all(size_t max, bs_error_t* error) {
     size_t i, open = 0, alloc;
     ssize_t count;
     libusb_device** devices;
     bs_device_t** dev = NULL;
-    if (!init_glob()) return NULL;
+    if (!init_glob(error)) return NULL;
     if (max == 0) max = 12;
     count = libusb_get_device_list(glob.ctx, &devices);
-    if (count < 0) return NULL;
+    if (count < 0) {
+        if (error) *error = error_from_libusb(count);
+        return NULL;
+    }
+    if (error) *error = BS_NO_ERROR;
     alloc = (size_t)count;
     if (alloc > max) alloc = max;
     dev = calloc(sizeof(bs_device_t*), alloc + 1);
     for (i = 0; i < (size_t)count; i++) {
-        bs_device_t* d = bs_open(devices[i], NULL);
+        bs_device_t* d = bs_open(devices[i], NULL, NULL);
         if (d) {
             assert(open < alloc);
             dev[open++] = d;
@@ -171,6 +208,14 @@ bool bs_good(bs_device_t* device) {
     return bs_get(device, &clr);
 }
 
+bs_error_t bs_error(bs_device_t* device) {
+    if (device == NULL) {
+        assert(false);
+        return BS_ERROR_INVALID_PARAM;
+    }
+    return device->last_error;
+}
+
 bool bs_set(bs_device_t* device, bs_color_t color) {
     return bs_set_pro(device, 0, color);
 }
@@ -181,24 +226,41 @@ bool bs_get(bs_device_t* device, bs_color_t* color) {
 
 static unsigned int TIMEOUT = 0;
 
-static ssize_t bs_ctrl_transfer(bs_device_t* device, uint8_t request_type,
-                                uint8_t request, uint16_t value, uint16_t index,
-                                uint8_t* data, uint16_t length) {
-    int ret = libusb_control_transfer(device->handle, request_type, request,
+static bool bs_ctrl_transfer(bs_device_t* device, uint8_t request_type,
+                             uint8_t request, uint16_t value, uint16_t index,
+                             uint8_t* data, uint16_t length) NONULL;
+
+bool bs_ctrl_transfer(bs_device_t* device, uint8_t request_type,
+                      uint8_t request, uint16_t value, uint16_t index,
+                      uint8_t* data, uint16_t length) {
+    int ret;
+    do {
+        ret = libusb_control_transfer(device->handle, request_type, request,
                                       value, index, data, length, TIMEOUT);
-    if (ret >= 0) return ret;
+    } while (ret == LIBUSB_ERROR_INTERRUPTED);
     if (ret == LIBUSB_ERROR_NO_DEVICE) {
-        bs_device_t* dev = bs_open_matching_serial(device->serial);
+        bs_device_t* dev = bs_open_matching_serial(device->serial, NULL);
         if (dev != NULL) {
             libusb_close(device->handle);
             device->handle = dev->handle;
             free(dev->serial);
             free(dev);
-            ret = libusb_control_transfer(device->handle, request_type, request,
-                                          value, index, data, length, TIMEOUT);
+            do {
+                ret = libusb_control_transfer(device->handle, request_type,
+                                              request, value, index, data,
+                                              length, TIMEOUT);
+            } while (ret == LIBUSB_ERROR_INTERRUPTED);
         }
     }
-    return ret;
+    if (ret < 0) {
+        device->last_error = error_from_libusb(ret);
+        return false;
+    }
+    if ((uint16_t)ret != length) {
+        device->last_error = BS_ERROR_COMM;
+        return false;
+    }
+    return true;
 }
 
 bool bs_set_pro(bs_device_t* device, uint8_t index, bs_color_t color) {
@@ -212,7 +274,7 @@ bool bs_set_pro(bs_device_t* device, uint8_t index, bs_color_t color) {
         data[1] = color.red;
         data[2] = color.green;
         data[3] = color.blue;
-        return bs_ctrl_transfer(device, 0x20, 0x9, 1, 0, data, 4) == 4;
+        return bs_ctrl_transfer(device, 0x20, 0x9, 1, 0, data, 4);
     } else {
         data[0] = 5;
         data[1] = 0;  /* Channel */
@@ -220,7 +282,7 @@ bool bs_set_pro(bs_device_t* device, uint8_t index, bs_color_t color) {
         data[3] = color.red;
         data[4] = color.green;
         data[5] = color.blue;
-        return bs_ctrl_transfer(device, 0x20, 0x9, 5, 0, data, 6) == 6;
+        return bs_ctrl_transfer(device, 0x20, 0x9, 5, 0, data, 6);
     }
 }
 
@@ -249,14 +311,19 @@ static size_t min_size(uint8_t count) {
 }
 
 bool bs_get_pro(bs_device_t* device, uint8_t index, bs_color_t* color) {
-    if (device == NULL || color == NULL) {
+    if (device == NULL) {
         assert(false);
+        return false;
+    }
+    if (color == NULL) {
+        assert(false);
+        device->last_error = BS_ERROR_INVALID_PARAM;
         return false;
     }
     if (index == 0) {
         uint8_t data[4];
-        if (bs_ctrl_transfer(device, 0x80 | 0x20, 0x1, 1, 0,
-                             data, sizeof(data)) != 4) {
+        if (!bs_ctrl_transfer(device, 0x80 | 0x20, 0x1, 1, 0,
+                              data, sizeof(data))) {
             return false;
         }
         color->red = data[1];
@@ -265,9 +332,8 @@ bool bs_get_pro(bs_device_t* device, uint8_t index, bs_color_t* color) {
         return true;
     } else {
         uint8_t data[2 + 64 * 3];
-        size_t size = min_size(index + 1);
-        if (bs_ctrl_transfer(device, 0x80 | 0x20, 0x1, report_id(index + 1), 0,
-                             data, size) < size) {
+        if (!bs_ctrl_transfer(device, 0x80 | 0x20, 0x1, report_id(index + 1), 0,
+                              data, min_size(index + 1))) {
             return false;
         }
         color->red = data[2 + index * 3 + 1];
@@ -284,8 +350,13 @@ bool bs_set_many(bs_device_t* device, uint8_t count, const bs_color_t* color) {
     size_t o, size;
     if (count == 0) return true;
     if (count > 64) count = 64;
-    if (device == NULL || color == NULL) {
+    if (device == NULL) {
         assert(false);
+        return false;
+    }
+    if (color == NULL) {
+        assert(false);
+        device->last_error = BS_ERROR_INVALID_PARAM;
         return false;
     }
     data[0] = 0;
@@ -298,8 +369,7 @@ bool bs_set_many(bs_device_t* device, uint8_t count, const bs_color_t* color) {
     }
     size = min_size(count);
     memset(data + o, 0, size - o);
-    return bs_ctrl_transfer(device, 0x20, 0x9, report_id(count), 0, data, size)
-        == size;
+    return bs_ctrl_transfer(device, 0x20, 0x9, report_id(count), 0, data, size);
 }
 
 bool bs_get_many(bs_device_t* device, uint8_t count, bs_color_t* color) {
@@ -308,16 +378,21 @@ bool bs_get_many(bs_device_t* device, uint8_t count, bs_color_t* color) {
     uint8_t i;
     size_t o;
     if (count == 0) return true;
-    if (device == NULL || color == NULL) {
+    if (device == NULL) {
         assert(false);
+        return false;
+    }
+    if (color == NULL) {
+        assert(false);
+        device->last_error = BS_ERROR_INVALID_PARAM;
         return false;
     }
     if (count > 64) {
         memset(color + 64, 0, sizeof(bs_color_t) * (count - 64));
         count = 64;
     }
-    o = min_size(count);
-    if (bs_ctrl_transfer(device, 0x20, 0x9, report_id(count), 0, data, o) < o) {
+    if (!bs_ctrl_transfer(device, 0x20, 0x9, report_id(count), 0, data,
+                          min_size(count))) {
         return false;
     }
     i = count;
@@ -330,4 +405,65 @@ bool bs_get_many(bs_device_t* device, uint8_t count, bs_color_t* color) {
     }
     assert(o == 2);
     return true;
+}
+
+bs_error_t error_from_libusb(ssize_t err) {
+    if (err >= 0) return BS_NO_ERROR;
+    switch (err) {
+    case LIBUSB_ERROR_IO:
+        return BS_ERROR_IO;
+    case LIBUSB_ERROR_INVALID_PARAM:
+        return BS_ERROR_INVALID_PARAM;
+    case LIBUSB_ERROR_ACCESS:
+        return BS_ERROR_ACCESS;
+    case LIBUSB_ERROR_NO_DEVICE:
+    case LIBUSB_ERROR_NOT_FOUND:
+        return BS_ERROR_DISCONNECTED;
+    case LIBUSB_ERROR_BUSY:
+        return BS_ERROR_BUSY;
+    case LIBUSB_ERROR_TIMEOUT:
+        return BS_ERROR_TIMEOUT;
+    case LIBUSB_ERROR_OVERFLOW:
+        return BS_ERROR_OVERFLOW;
+    case LIBUSB_ERROR_PIPE:
+        return BS_ERROR_PIPE;
+    case LIBUSB_ERROR_NO_MEM:
+        return BS_ERROR_NO_MEM;
+    case LIBUSB_ERROR_NOT_SUPPORTED:
+        return BS_ERROR_NOT_SUPPORTED;
+    default:
+        return BS_ERROR_UNKNOWN;
+    }
+}
+
+const char* bs_error_str(bs_error_t error) {
+    switch (error) {
+    case BS_NO_ERROR:
+        return "No error";
+    case BS_ERROR_COMM:
+        return "Communication error";
+    case BS_ERROR_IO:
+        return "Input/output error";
+    case BS_ERROR_INVALID_PARAM:
+        return "Invalid parameter";
+    case BS_ERROR_ACCESS:
+        return "Access denied";
+    case BS_ERROR_DISCONNECTED:
+        return "Device disconnected";
+    case BS_ERROR_BUSY:
+        return "Resource busy";
+    case BS_ERROR_TIMEOUT:
+        return "Operation timeout";
+    case BS_ERROR_OVERFLOW:
+        return "Overflow";
+    case BS_ERROR_PIPE:
+        return "Pipe error";
+    case BS_ERROR_NO_MEM:
+        return "Insufficient memory";
+    case BS_ERROR_NOT_SUPPORTED:
+        return "Operation not supported";
+    case BS_ERROR_UNKNOWN:
+        break;
+    }
+    return "Unknown error";
 }
