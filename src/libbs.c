@@ -23,7 +23,6 @@ static bool init_glob(void) {
             return false;
         }
         assert(glob.ctx);
-        libusb_set_debug(glob.ctx, 3);
     }
     return true;
 }
