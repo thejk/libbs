@@ -121,7 +121,7 @@ bs_device_t* bs_open_matching_serial(const char* serial) {
 }
 
 bs_device_t** bs_open_all(size_t max) {
-    size_t i, open, alloc;
+    size_t i, open = 0, alloc;
     ssize_t count;
     libusb_device** devices;
     bs_device_t** dev = NULL;

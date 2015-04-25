@@ -1,10 +1,13 @@
 MAINTAINERCLEANFILES = Makefile.in
 
-bin_PROGRAMS = bs
+bin_PROGRAMS = bs lsbs
 lib_LTLIBRARIES = libbs.la
 
 bs_SOURCES = bs.c libbs.h compiler_stuff.h
 bs_LDADD = libbs.la
+
+lsbs_SOURCES = lsbs.c libbs.h compiler_stuff.h
+lsbs_LDADD = libbs.la
 
 libbs_la_SOURCES = libbs.h compiler_stuff.h libbs.c
 libbs_la_CFLAGS = @LIBUSB_CFLAGS@
