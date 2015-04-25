@@ -1,0 +1,6 @@
+# This file is installed by libbs to enable write access to BlinkStick devices
+# to any seated user
+
+ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="41e5", TAG+="uaccess", TAG+="udev-acl"
+
+# vim: ft=udevrules

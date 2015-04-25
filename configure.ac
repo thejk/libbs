@@ -32,6 +32,10 @@ AC_CHECK_HEADER([stdint.h],,AC_MSG_ERROR([Need stdint.h]))
 AC_CHECK_HEADER([stdbool.h],,AC_MSG_ERROR([Need stdbool.h]))
 AC_CHECK_FUNCS([getopt_long])
 
+AC_ARG_ENABLE([udev-rules],AS_HELP_STRING([--enable-udev-rules],[install udev rules (default is no)]),[install_udev_rules=$enableval],[install_udev_rules=no])
+
+AM_CONDITIONAL([INSTALL_UDEV_RULES],[test "x$install_udev_rules" = xyes])
+
 PKG_CHECK_MODULES([LIBUSB], [libusb >= 0.1])
 
 AC_CONFIG_FILES([data/libbs.pc])
