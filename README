@@ -1,0 +1,6 @@
+LibBS, C API for talking to BlinkSticks
+
+Supports BlinkStick, BlinkStick Pro and BlinkStick Strip/Square but I've only
+tested the last one as of yet.
+
+A work in progress but seems to work fairly well
