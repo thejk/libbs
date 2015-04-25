@@ -16,6 +16,7 @@
 static struct {
     const char* serial;
     bool verbose;
+    bool reset;
     bool get_color;
     bool get_mode;
     bool set_mode;
@@ -25,6 +26,7 @@ static struct {
 } glob;
 
 static bool handle_args(int argc, char** argv, int* exitcode);
+static bool reset(bs_device_t* dev);
 
 int main(int argc, char** argv) {
     int exitcode;
@@ -51,6 +53,12 @@ int main(int argc, char** argv) {
     if (glob.verbose && !glob.serial) {
         fprintf(stdout, "Found BlinkStick with serial: %s\n", bs_serial(dev));
     }
+    if (glob.set_mode) {
+        if (!bs_set_mode(dev, glob.mode)) {
+            fprintf(stderr, "Error setting mode: %s\n",
+                    bs_error_str(bs_error(dev)));
+        }
+    }
     if (glob.get_mode) {
         int mode = bs_get_mode(dev);
         if (mode >= 0) {
@@ -76,9 +84,10 @@ int main(int argc, char** argv) {
             fprintf(stderr, "Error getting mode: %s\n",
                     bs_error_str(bs_error(dev)));
         }
-    } else if (glob.set_mode) {
-        if (!bs_set_mode(dev, glob.mode)) {
-            fprintf(stderr, "Error setting mode: %s\n",
+    }
+    if (glob.reset) {
+        if (!reset(dev)) {
+            fprintf(stderr, "Error resetting: %s\n",
                     bs_error_str(bs_error(dev)));
         }
     }
@@ -140,6 +149,12 @@ static void print_usage() {
     fputs("                         ", stdout);
     fputs("MODE can be 0 (Normal), 1 (Inverse), 2 (Multi) or 3 (Repeat).\n", stdout);
 #if HAVE_GETOPT_LONG
+    fputs("  -r, --reset            ", stdout);
+#else
+    fputs("  -r                     ", stdout);
+#endif
+    fputs("reset BlinkStick to black before getting/setting colors\n", stdout);
+#if HAVE_GETOPT_LONG
     fputs("  -s, --serial=SERIAL    ", stdout);
 #else
     fputs("  -s SERIAL              ", stdout);
@@ -173,7 +188,7 @@ static void print_usage() {
 }
 
 bool handle_args(int argc, char** argv, int* exitcode) {
-    const char* shortopts = "Vhvs:gi:m::";
+    const char* shortopts = "Vhvs:gi:m::r";
     bool error = false, usage = false, version = false;
 #if HAVE_GETOPT_LONG
     static const struct option longopts[] = {
@@ -184,6 +199,7 @@ bool handle_args(int argc, char** argv, int* exitcode) {
         { "get",     no_argument,       NULL, 'g' },
         { "index",   required_argument, NULL, 'i' },
         { "mode",    optional_argument, NULL, 'm' },
+        { "reset",   no_argument,       NULL, 'r' },
         { NULL,      0,                 NULL,  0  }
     };
 #endif
@@ -240,6 +256,9 @@ bool handle_args(int argc, char** argv, int* exitcode) {
             glob.index = tmp & 0xff;
             break;
         }
+        case 'r':
+            glob.reset = true;
+            break;
         case '?':
             error = true;
             break;
@@ -263,7 +282,7 @@ bool handle_args(int argc, char** argv, int* exitcode) {
             error = true;
         }
     } else {
-        if (!glob.get_mode && !glob.set_mode && optind == argc) {
+        if (!glob.get_mode && !glob.set_mode && !glob.reset && optind == argc) {
             fputs("Expected one color after options\n", stderr);
             error = true;
         } else {
@@ -317,4 +336,21 @@ bool handle_args(int argc, char** argv, int* exitcode) {
         return false;
     }
     return true;
+}
+
+bool reset(bs_device_t* dev) {
+    const unsigned int count = bs_get_max_leds(dev);
+    int mode;
+    if (count == 0) return false;
+    mode = bs_get_mode(dev);
+    if (mode == -1) return false;
+    if (count == 1 || mode == BS_MODE_REPEAT) {
+        bs_color_t clr = { 0 };
+        return bs_set(dev, clr);
+    } else {
+        bs_color_t* clr = calloc(sizeof(bs_color_t), count);
+        bool ret = bs_set_many(dev, count, clr);
+        free(clr);
+        return ret;
+    }
 }
