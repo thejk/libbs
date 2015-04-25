@@ -4,9 +4,10 @@
 
 #include <stdio.h>
 
+#include "extra_compiler_stuff.h"
 #include "libbs.h"
 
-int main(int argc, char** argv) {
+int main(int argc UNUSED, char** argv UNUSED) {
     bs_error_t error;
     bs_device_t** devs = bs_open_all(0, &error);
     if (devs == NULL) {

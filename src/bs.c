@@ -345,7 +345,7 @@ bool reset(bs_device_t* dev) {
     mode = bs_get_mode(dev);
     if (mode == -1) return false;
     if (count == 1 || mode == BS_MODE_REPEAT) {
-        bs_color_t clr = { 0 };
+        bs_color_t clr = { 0, 0, 0 };
         return bs_set(dev, clr);
     } else {
         bs_color_t* clr = calloc(sizeof(bs_color_t), count);

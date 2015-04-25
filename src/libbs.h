@@ -68,7 +68,7 @@ BS_API void bs_shutdown(void);
  * @param error if non-null, set to error if there was one
  * @return device or NULL in case of error
  */
-BS_API bs_device_t* bs_open_first(bs_error_t* error) MALLOC;
+BS_API bs_device_t* bs_open_first(bs_error_t* error) BS_MALLOC;
 
 /**
  * Open BlinkStick with matching serial if found.
@@ -79,7 +79,7 @@ BS_API bs_device_t* bs_open_first(bs_error_t* error) MALLOC;
  */
 BS_API bs_device_t* bs_open_matching_serial(const char* serial,
                                             bs_error_t* error)
-    NONULL_ARGS(1) MALLOC;
+    BS_NONULL_ARGS(1) BS_MALLOC;
 
 /**
  * Open all BlinkStick devices found.
@@ -90,7 +90,7 @@ BS_API bs_device_t* bs_open_matching_serial(const char* serial,
  * @param error if non-null, set to error if there was one
  * @return NULL-terminated array of open devices or NULL in case of error
  */
-BS_API bs_device_t** bs_open_all(size_t max, bs_error_t* error) MALLOC;
+BS_API bs_device_t** bs_open_all(size_t max, bs_error_t* error) BS_MALLOC;
 
 /**
  * Close open device, calling twice on the same device is undefined.
@@ -103,13 +103,13 @@ BS_API void bs_close(bs_device_t* device);
  * @param device to get serial from, may not be NULL
  * @return a copy of the serial for the device, or NULL in case of error
  */
-BS_API char* bs_serial(bs_device_t* device) NONULL MALLOC;
+BS_API char* bs_serial(bs_device_t* device) BS_NONULL BS_MALLOC;
 
 /**
  * @param device to check, may not be NULL
  * @return true if device seems to be working
  */
-BS_API bool bs_good(bs_device_t* device) NONULL;
+BS_API bool bs_good(bs_device_t* device) BS_NONULL;
 
 /**
  * Return last error, not reset to BS_NO_ERROR when a method succeeds after
@@ -117,7 +117,7 @@ BS_API bool bs_good(bs_device_t* device) NONULL;
  * @param device to get error from, may not be NULL
  * @return last error if any
  */
-BS_API bs_error_t bs_error(bs_device_t* device) NONULL;
+BS_API bs_error_t bs_error(bs_device_t* device) BS_NONULL;
 
 /**
  * Return an description of the error in English
@@ -130,7 +130,7 @@ BS_API const char* bs_error_str(bs_error_t err);
  * @param color color to set
  * @return false if there was an error
  */
-BS_API bool bs_set(bs_device_t* device, bs_color_t color) NONULL;
+BS_API bool bs_set(bs_device_t* device, bs_color_t color) BS_NONULL;
 
 /**
  * Get current color
@@ -138,7 +138,7 @@ BS_API bool bs_set(bs_device_t* device, bs_color_t color) NONULL;
  * @param color pointer to receive current color, may not be NULL
  * @return false if there was an error
  */
-BS_API bool bs_get(bs_device_t* device, bs_color_t* color) NONULL;
+BS_API bool bs_get(bs_device_t* device, bs_color_t* color) BS_NONULL;
 
 /**
  * Set color of indexed led on a pro stick
@@ -148,7 +148,7 @@ BS_API bool bs_get(bs_device_t* device, bs_color_t* color) NONULL;
  * @return false if there was an error
  */
 BS_API bool bs_set_pro(bs_device_t* device, uint8_t index,
-                       bs_color_t color) NONULL;
+                       bs_color_t color) BS_NONULL;
 
 /**
  * Get color of indexed led on a pro stick
@@ -158,7 +158,7 @@ BS_API bool bs_set_pro(bs_device_t* device, uint8_t index,
  * @return false if there was an error
  */
 BS_API bool bs_get_pro(bs_device_t* device, uint8_t index,
-                       bs_color_t* color) NONULL;
+                       bs_color_t* color) BS_NONULL;
 
 /**
  * Set color of many indexed led at the same time
@@ -171,7 +171,7 @@ BS_API bool bs_get_pro(bs_device_t* device, uint8_t index,
  * @return false if there was an error
  */
 BS_API bool bs_set_many(bs_device_t* device, uint8_t count,
-                        const bs_color_t* color) NONULL;
+                        const bs_color_t* color) BS_NONULL;
 
 /**
  * Get color of many indexed led at the same time
@@ -181,7 +181,7 @@ BS_API bool bs_set_many(bs_device_t* device, uint8_t count,
  * @return false if there was an error
  */
 BS_API bool bs_get_many(bs_device_t* device, uint8_t count,
-                        bs_color_t* color) NONULL;
+                        bs_color_t* color) BS_NONULL;
 
 /**
  * Set device mode on BlinkStick Pro.
@@ -189,14 +189,14 @@ BS_API bool bs_get_many(bs_device_t* device, uint8_t count,
  * @param device device to change mode on, may not be NULL
  * @return false if there was an error
  */
-BS_API bool bs_set_mode(bs_device_t* device, uint8_t mode) NONULL;
+BS_API bool bs_set_mode(bs_device_t* device, uint8_t mode) BS_NONULL;
 
 /**
  * Get current device mode from BlinkStick Pro.
  * @param device device to get mode from, may not be NULL
  * @return device mode or -1 in case of error
  */
-BS_API int bs_get_mode(bs_device_t* device) NONULL;
+BS_API int bs_get_mode(bs_device_t* device) BS_NONULL;
 
 /**
  * Maximum number of leds on device
@@ -204,8 +204,6 @@ BS_API int bs_get_mode(bs_device_t* device) NONULL;
  * @param device device to get leds on, may not be NULL
  * @return 0 if there was an error
  */
-BS_API uint16_t bs_get_max_leds(bs_device_t* device) NONULL;
-
-#undef BS_API
+BS_API uint16_t bs_get_max_leds(bs_device_t* device) BS_NONULL;
 
 #endif /* LIBBS_H */

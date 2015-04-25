@@ -68,9 +68,11 @@ void bs_shutdown(void) {
 }
 
 static bs_device_t* bs_open(libusb_device* device, const char* match_serial,
-                            bs_error_t* error) NONULL_ARGS(1) MALLOC;
+                            bs_error_t* error) BS_NONULL_ARGS(1) BS_MALLOC;
 
-static bs_version_t get_version(const char* serial) {
+static bs_version_t get_version(const char* serial) BS_NONULL;
+
+bs_version_t get_version(const char* serial) {
     char* end;
     unsigned long tmp;
     const char* pos = strchr(serial, '-');
@@ -97,7 +99,6 @@ bs_device_t* bs_open(libusb_device* device, const char* match_serial,
     struct libusb_device_descriptor desc;
     char tmp[256];
     int ret, len;
-    char* end;
     ret = libusb_get_device_descriptor(device, &desc);
     if (ret) {
         if (error) *error = error_from_libusb(ret);
@@ -162,11 +163,6 @@ bs_device_t* bs_open_matching_serial(const char* serial, bs_error_t* error) {
     ssize_t count;
     libusb_device** devices;
     bs_device_t* dev = NULL;
-    if (!serial) {
-        assert(false);
-        if (error) *error = BS_ERROR_INVALID_PARAM;
-        return NULL;
-    }
     if (!init_glob(error)) return NULL;
     count = libusb_get_device_list(glob.ctx, &devices);
     if (count < 0) {
@@ -221,28 +217,16 @@ void bs_close(bs_device_t* device) {
 }
 
 char* bs_serial(bs_device_t* device) {
-    if (device == NULL) {
-        assert(false);
-        return NULL;
-    }
     return strdup(device->serial);
 }
 
 bool bs_good(bs_device_t* device) {
     bs_color_t clr;
-    if (device == NULL) {
-        assert(false);
-        return false;
-    }
     /* TODO: Make a more effective version? */
     return bs_get(device, &clr);
 }
 
 bs_error_t bs_error(bs_device_t* device) {
-    if (device == NULL) {
-        assert(false);
-        return BS_ERROR_INVALID_PARAM;
-    }
     return device->last_error;
 }
 
@@ -258,7 +242,7 @@ static unsigned int TIMEOUT = 0;
 
 static bool bs_ctrl_transfer(bs_device_t* device, uint8_t request_type,
                              uint8_t request, uint16_t value, uint16_t index,
-                             uint8_t* data, uint16_t length) NONULL;
+                             uint8_t* data, uint16_t length) BS_NONULL;
 
 bool bs_ctrl_transfer(bs_device_t* device, uint8_t request_type,
                       uint8_t request, uint16_t value, uint16_t index,
@@ -293,7 +277,7 @@ bool bs_ctrl_transfer(bs_device_t* device, uint8_t request_type,
     return true;
 }
 
-static size_t max_count(bs_device_t* device) NONULL;
+static size_t max_count(bs_device_t* device) BS_NONULL;
 size_t max_count(bs_device_t* device) {
     switch (device->version) {
     case BS_VERSION_BASIC:
@@ -309,10 +293,6 @@ size_t max_count(bs_device_t* device) {
 
 bool bs_set_pro(bs_device_t* device, uint8_t index, bs_color_t color) {
     uint8_t data[6];
-    if (device == NULL) {
-        assert(false);
-        return false;
-    }
     if (index == 0) {
         data[0] = 0;
         data[1] = color.red;
@@ -369,15 +349,6 @@ static size_t min_size(uint8_t count) {
 }
 
 bool bs_get_pro(bs_device_t* device, uint8_t index, bs_color_t* color) {
-    if (device == NULL) {
-        assert(false);
-        return false;
-    }
-    if (color == NULL) {
-        assert(false);
-        device->last_error = BS_ERROR_INVALID_PARAM;
-        return false;
-    }
     if (index == 0) {
         uint8_t data[4];
         if (!bs_ctrl_transfer(device,
@@ -415,21 +386,11 @@ bool bs_get_pro(bs_device_t* device, uint8_t index, bs_color_t* color) {
 }
 
 bool bs_set_many(bs_device_t* device, uint8_t count, const bs_color_t* color) {
-    size_t len;
     uint8_t data[2 + 64 * 3];
     uint8_t i;
     size_t o, size;
     if (count == 0) return true;
     if (count == 1) return bs_set_pro(device, 0, color[0]);
-    if (device == NULL) {
-        assert(false);
-        return false;
-    }
-    if (color == NULL) {
-        assert(false);
-        device->last_error = BS_ERROR_INVALID_PARAM;
-        return false;
-    }
     if (count > max_count(device)) {
         device->last_error = BS_ERROR_INVALID_PARAM;
         return false;
@@ -453,20 +414,10 @@ bool bs_set_many(bs_device_t* device, uint8_t count, const bs_color_t* color) {
 }
 
 bool bs_get_many(bs_device_t* device, uint8_t count, bs_color_t* color) {
-    size_t len;
     uint8_t data[2 + 64 * 3];
     uint8_t i;
     size_t o;
     if (count == 0) return true;
-    if (device == NULL) {
-        assert(false);
-        return false;
-    }
-    if (color == NULL) {
-        assert(false);
-        device->last_error = BS_ERROR_INVALID_PARAM;
-        return false;
-    }
     if (count == 1) return bs_get_pro(device, 0, color);
     if (count > max_count(device)) {
         device->last_error = BS_ERROR_INVALID_PARAM;
@@ -494,10 +445,6 @@ bool bs_get_many(bs_device_t* device, uint8_t count, bs_color_t* color) {
 
 bool bs_set_mode(bs_device_t* device, uint8_t mode) {
     uint8_t data[2];
-    if (device == NULL) {
-        assert(false);
-        return false;
-    }
     switch (device->version) {
     case BS_VERSION_BASIC:
         if (mode != BS_MODE_NORMAL) {
@@ -539,10 +486,6 @@ bool bs_set_mode(bs_device_t* device, uint8_t mode) {
 
 int bs_get_mode(bs_device_t* device) {
     uint8_t data[2];
-    if (device == NULL) {
-        assert(false);
-        return -1;
-    }
     if (device->mode < 0) {
         if (!bs_ctrl_transfer(device,
                               LIBUSB_ENDPOINT_IN |
@@ -557,10 +500,6 @@ int bs_get_mode(bs_device_t* device) {
 }
 
 uint16_t bs_get_max_leds(bs_device_t* device) {
-    if (device == NULL) {
-        assert(false);
-        return 0;
-    }
     switch (device->version) {
     case BS_VERSION_BASIC:
         return 1;

@@ -24,11 +24,16 @@ AC_ARG_ENABLE([debug], AC_HELP_STRING([compile with debug options]),
               fi)
 AC_SUBST([DEFINES])
 
+LIB_DEFINES="$DEFINES"
+AX_APPEND_COMPILE_FLAGS([-fvisbility=hidden], [LIB_DEFINES])
+AC_SUBST([LIB_DEFINES])
+
 AC_CHECK_HEADER([stdint.h],,AC_MSG_ERROR([Need stdint.h]))
 AC_CHECK_HEADER([stdbool.h],,AC_MSG_ERROR([Need stdbool.h]))
 AC_CHECK_FUNCS([getopt_long])
 
-PKG_CHECK_MODULES([LIBUSB], [libusb])
+PKG_CHECK_MODULES([LIBUSB], [libusb >= 0.1])
 
+AC_CONFIG_FILES([data/libbs.pc])
 AC_CONFIG_HEADERS([src/config.h])
-AC_OUTPUT([Makefile src/Makefile])
+AC_OUTPUT([Makefile data/Makefile src/Makefile])

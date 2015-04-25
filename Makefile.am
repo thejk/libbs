@@ -4,4 +4,4 @@ MAINTAINERCLEANFILES = Makefile.in aclocal.m4 config.guess config.h.in \
                        config.sub configure depcomp install-sh ltmain.sh \
                        missing config.rpath mkinstalldirs compile
 
-SUBDIRS = src
+SUBDIRS = data src
