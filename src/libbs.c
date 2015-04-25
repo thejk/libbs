@@ -11,7 +11,7 @@
 
 #include <stdio.h>
 
-struct {
+static struct {
     libusb_context* ctx;
     bool forced;
     long devices;
