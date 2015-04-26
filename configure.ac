@@ -37,7 +37,7 @@ AC_ARG_ENABLE([udev-rules],AS_HELP_STRING([--enable-udev-rules],[install udev ru
 
 AM_CONDITIONAL([INSTALL_UDEV_RULES],[test "x$install_udev_rules" = xyes])
 
-PKG_CHECK_MODULES([LIBUSB], [libusb >= 0.1])
+PKG_CHECK_MODULES([LIBUSB], [libusb-1.0 >= 1.0])
 
 AC_CONFIG_FILES([data/libbs.pc])
 AC_CONFIG_HEADERS([src/config.h])

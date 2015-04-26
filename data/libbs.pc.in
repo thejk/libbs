@@ -5,7 +5,7 @@ includedir=@includedir@
 
 Name: libbs
 Description: BlinkStick library
-Requires.private: libusb >= 0.1
+Requires.private: libusb-1.0 >= 1.0
 Version: @VERSION@
 Cflags: -I${includedir}
 Libs: -L{libdir} -lbs
