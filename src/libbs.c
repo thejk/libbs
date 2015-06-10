@@ -289,6 +289,7 @@ size_t max_count(bs_device_t* device) {
     case BS_VERSION_UNKOWN:
         return 64;
     }
+    return 0;
 }
 
 bool bs_set_pro(bs_device_t* device, uint8_t index, bs_color_t color) {
