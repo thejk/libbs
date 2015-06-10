@@ -3,6 +3,7 @@
 #endif
 
 #include <math.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -15,6 +16,8 @@
 #endif
 #if HAVE_PULSEAUDIO
 # include <pulse/pulseaudio.h>
+#else
+# include <unistd.h>
 #endif
 
 static struct {
