@@ -39,6 +39,17 @@ AM_CONDITIONAL([INSTALL_UDEV_RULES],[test "x$install_udev_rules" = xyes])
 
 PKG_CHECK_MODULES([LIBUSB], [libusb-1.0 >= 1.0])
 
+AC_SEARCH_LIBS([round], [m])
+AC_SEARCH_LIBS([ceil], [m])
+AC_SEARCH_LIBS([floor], [m])
+
+pulseaudio_need="libpulse >= 0.9.15"
+PKG_CHECK_EXISTS([$pulseaudio_need],[
+  have_pulseaudio=1
+  PKG_CHECK_MODULES([PULSEAUDIO], [$pulseaudio_need])
+],[have_pulseaudio=0])
+AC_DEFINE_UNQUOTED([HAVE_PULSEAUDIO],[$have_pulseaudio],[define to 1 if pulseaudio is available])
+
 AC_CONFIG_FILES([data/libbs.pc])
 AC_CONFIG_HEADERS([src/config.h])
 AC_OUTPUT([Makefile data/Makefile src/Makefile])

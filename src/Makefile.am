@@ -12,8 +12,8 @@ lsbs_CFLAGS = @DEFINES@
 lsbs_LDADD = libbs.la
 
 vmbs_SOURCES = vmbs.c libbs.h compiler_stuff.h extra_compiler_stuff.h
-vmbs_CFLAGS = @DEFINES@ -DVERSION="\"@VERSION@\""
-vmbs_LDADD = libbs.la
+vmbs_CFLAGS = @DEFINES@ -DVERSION="\"@VERSION@\"" @PULSEAUDIO_CFLAGS@
+vmbs_LDADD = libbs.la @PULSEAUDIO_LIBS@
 
 libbs_la_SOURCES = libbs.h compiler_stuff.h libbs.c
 libbs_la_CFLAGS = @LIB_DEFINES@ @LIBUSB_CFLAGS@
