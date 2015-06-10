@@ -26,7 +26,7 @@ AC_ARG_ENABLE([debug], AC_HELP_STRING([compile with debug options]),
 AC_SUBST([DEFINES])
 
 LIB_DEFINES="$DEFINES"
-AX_APPEND_COMPILE_FLAGS([-fvisbility=hidden], [LIB_DEFINES])
+AX_APPEND_COMPILE_FLAGS([-fvisibility=hidden], [LIB_DEFINES])
 AC_SUBST([LIB_DEFINES])
 
 AC_CHECK_HEADER([stdint.h],,AC_MSG_ERROR([Need stdint.h]))
