@@ -88,6 +88,7 @@ static void print_usage() {
 #else
     fputs("  -o OUTPUT              ", stdout);
 #endif
+    fputs("use pulseaudio OUTPUT\n", stdout);
 #endif
 #if HAVE_GETOPT_LONG
     fputs("  -V, --version          ", stdout);
